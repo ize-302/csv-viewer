@@ -62,31 +62,22 @@ pub fn main() !void {
     try table.printstd();
 }
 
-fn handleCols(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
-    var col = try std.ArrayList(u8).initCapacity(allocator, 0);
-    for (text) |c| {
-        try col.append(allocator, c);
-    }
-    return try col.toOwnedSlice(allocator);
-}
-
 fn handleRow(allocator: std.mem.Allocator, text: []const u8) ![][]const u8 {
     var row = try std.ArrayList([]const u8).initCapacity(allocator, 0);
     var in_quotes = false;
-    var buffer: [500]u8 = undefined;
-    var len: usize = 0;
+    var col = try std.ArrayList(u8).initCapacity(allocator, 0);
+    defer col.deinit(allocator);
 
     // handle split of row into chunks of columns.
     for (text, 0..) |c, i| {
         if (c == '"' and !in_quotes) in_quotes = true;
         if (c == '"' and i + 1 < text.len and text[i + 1] == ',') in_quotes = false;
         if (c == ',' and !in_quotes) {
-            const col = try handleCols(allocator, buffer[0..len]);
-            try row.append(allocator, col);
-            len = 0;
+            const owned = try col.toOwnedSlice(allocator);
+            try row.append(allocator, owned);
+            col.clearRetainingCapacity();
         } else {
-            buffer[len] = c;
-            len += 1;
+            try col.append(allocator, c);
         }
     }
     return try row.toOwnedSlice(allocator);
