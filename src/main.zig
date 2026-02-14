@@ -70,7 +70,7 @@ pub fn main() !void {
         all_rows.deinit(allocator);
     }
 
-    var counter: usize = 0;
+    var current_line_index: usize = 0;
     while (reader_interface.takeDelimiter('\n') catch |err| {
         if (err == error.ReadFailed) {
             try std.Io.Writer.print(stdout, "Fail to read file\n", .{});
@@ -81,17 +81,17 @@ pub fn main() !void {
         try stdout.flush();
         return;
     }) |line| {
-        if (counter <= pagination.items) {
+        if (current_line_index <= pagination.items) {
             const row = try rowParser(allocator, line);
             try all_rows.append(allocator, row);
-            counter += 1;
+            current_line_index += 1;
         }
     }
 
     for (all_rows.items, 0..) |row, i| {
-        if (i == 0) try table.setTitle(row);
-        if (i > 0) try table.addRow(row);
+        if (i == 0) try table.setTitle(row) else try table.addRow(row);
     }
+
     const go = [_][][]const u8{};
     try table.addRows(&go);
     try table.printstd();
@@ -118,8 +118,7 @@ fn rowParser(allocator: std.mem.Allocator, text: []const u8) ![][]const u8 {
     }
     // last column
     if (col.items.len > 0) {
-        // const owned = try col.toOwnedSlice(allocator);
-        const owned = try allocator.dupe(u8, col.items);
+        const owned = try col.toOwnedSlice(allocator);
         try row.append(allocator, owned);
     }
     return try row.toOwnedSlice(allocator);
