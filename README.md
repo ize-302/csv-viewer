@@ -36,18 +36,25 @@ The compiled binary will be at `zig-out/bin/csv_viewer`.
 
 ```bash
 # Using zig build run
-zig build run -- path/to/file.csv
+zig build run -- path/to/file.csv --items=<number>
 
 # Or run the binary directly
-./zig-out/bin/csv_viewer path/to/file.csv
+./zig-out/bin/csv_viewer path/to/file.csv --items=<number>
 ```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--items=<number>` | Limit the number of rows displayed in the table |
 
 A sample file `samples/customers-100.csv` is included to try it out:
 
 > Samples were sourced from: [https://github.com/datablist/sample-csv-files](https://github.com/datablist/sample-csv-files)
 
 ```bash
-zig build run -- samples/customers-100.csv
+# Show the first 10 rows
+zig build run -- samples/customers-100.csv --items=10
 ```
 
 ## How It Works
@@ -66,6 +73,7 @@ zig build test
 ### Todos
 
 - [x] Render CSV file in table format
+- [x] Items per page
 - [ ] pagination support
 - [ ] detail of csv (name/path to csv, total number of rows / cols, current page)
 - [ ] color bool value
