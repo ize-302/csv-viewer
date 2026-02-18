@@ -1,26 +1,6 @@
 const std = @import("std");
 const pt = @import("prettytable");
 
-const PaginationStruct = struct {
-    items: u16 = 0,
-};
-
-const ArgStruct = struct {
-    args: [][:0]u8,
-    items: u16,
-
-    pub fn init(args: [][:0]u8) ArgStruct {
-        return ArgStruct{ .args = args, .items = 0 };
-    }
-
-    pub fn argumentHandler(self: *ArgStruct) PaginationStruct {
-        if (std.mem.eql(u8, self.args[1][0..8], "--items=")) {
-            self.items = std.fmt.parseInt(u16, self.args[1][8..], 10) catch unreachable;
-        }
-        return PaginationStruct{ .items = self.items };
-    }
-};
-
 pub fn main() !void {
     var stdout_buffer: [1024]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
@@ -35,12 +15,6 @@ pub fn main() !void {
 
     if (args.len == 1) {
         try std.Io.Writer.print(stdout, "Oops! specify a .csv file \n", .{});
-        try stdout.flush();
-        return;
-    }
-
-    if (args.len == 2) {
-        try std.Io.Writer.print(stdout, "Specify number of items to show using flag --items=value \n", .{});
         try stdout.flush();
         return;
     }
@@ -71,6 +45,10 @@ pub fn main() !void {
     }
 
     var current_line_index: usize = 0;
+
+    const item_start: usize = pagination.items * (pagination.page - 1);
+    const item_end: usize = item_start + pagination.items;
+
     while (reader_interface.takeDelimiter('\n') catch |err| {
         if (err == error.ReadFailed) {
             try std.Io.Writer.print(stdout, "Fail to read file\n", .{});
@@ -81,19 +59,32 @@ pub fn main() !void {
         try stdout.flush();
         return;
     }) |line| {
-        if (current_line_index <= pagination.items) {
+        if (current_line_index == 0) {
+            // header
             const row = try rowParser(allocator, line);
             try all_rows.append(allocator, row);
             current_line_index += 1;
+        } else {
+            if (current_line_index > item_start and current_line_index <= item_end) {
+                const row = try rowParser(allocator, line);
+                try all_rows.append(allocator, row);
+            }
+            current_line_index += 1;
         }
     }
+    // final row containing the details
+    const page_col = try std.fmt.allocPrint(allocator, "page: {d}/{d}", .{ pagination.page, current_line_index / pagination.items });
+    defer allocator.free(page_col);
+    const total_col = try std.fmt.allocPrint(allocator, "Total: {d}", .{current_line_index - 1});
+    defer allocator.free(total_col);
+    const per_page_col = try std.fmt.allocPrint(allocator, "Per page: {d}", .{pagination.items});
+    defer allocator.free(per_page_col);
+    const nrow = [_][]const u8{ " ", page_col, total_col, per_page_col };
 
     for (all_rows.items, 0..) |row, i| {
         if (i == 0) try table.setTitle(row) else try table.addRow(row);
     }
-
-    const go = [_][][]const u8{};
-    try table.addRows(&go);
+    try table.addRow(&nrow);
     try table.printstd();
 }
 
@@ -123,3 +114,43 @@ fn rowParser(allocator: std.mem.Allocator, text: []const u8) ![][]const u8 {
     }
     return try row.toOwnedSlice(allocator);
 }
+
+const FlagStruct = struct { flag: []const u8, value: u64 };
+const PaginationStruct = struct {
+    items: u64,
+    page: u64,
+};
+const ArgStruct = struct {
+    args: [][:0]u8,
+    items: u64,
+    page: u64,
+
+    pub fn init(args: [][:0]u8) ArgStruct {
+        return ArgStruct{ .args = args, .items = 10, .page = 1 };
+    }
+
+    pub fn argumentHandler(self: *ArgStruct) PaginationStruct {
+        const valid_flags = [_][]const u8{ "--items=", "--page=" };
+        for (self.args[1..]) |flag| {
+            if (std.mem.eql(u8, valid_flags[0], flag[0..(valid_flags[0].len)])) {
+                const caught_flag = flag[0..(valid_flags[0].len)];
+                const caught_value = std.fmt.parseInt(u64, flag[caught_flag.len..], 10) catch |err| {
+                    if (err == error.InvalidCharacter) std.debug.print("Value passed to {s} must be a valid number\n", .{flag});
+                    std.process.exit(1);
+                };
+                self.items = caught_value;
+            } else if (std.mem.eql(u8, valid_flags[1], flag[0..(valid_flags[1].len)])) {
+                const caught_flag = flag[0..(valid_flags[1].len)];
+                const caught_value = std.fmt.parseInt(u64, flag[caught_flag.len..], 10) catch |err| {
+                    if (err == error.InvalidCharacter) std.debug.print("Value passed to {s} must be a valid number\n", .{flag});
+                    std.process.exit(1);
+                };
+                self.page = caught_value;
+            } else {
+                std.debug.print("Incorrect flag passed at {s}\n", .{flag});
+                std.process.exit(1);
+            }
+        }
+        return PaginationStruct{ .items = self.items, .page = self.page };
+    }
+};
